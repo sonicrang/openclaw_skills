@@ -76,7 +76,24 @@ Model rule:
 - do **not** override the model by default;
 - only add `--model <model>` when the user explicitly asks for a specific model.
 
-## After configuration: always ask for a test
+## After configuration: verify persisted cron config, then ask for a test
+
+When you create, edit, migrate, or retarget an OpenClaw cron job, do **not** stop after the CLI reports success. Also verify the persisted scheduler file:
+
+```text
+~/.openclaw/cron/jobs.json
+```
+
+Why this matters:
+- the job's actual persisted payload/path/delivery config lives in `jobs.json`;
+- when moving scripts or changing execution paths, a stale `payload.message` in `jobs.json` can leave the cron job pointing at an old path even if the user thinks the task was "updated";
+- after any cron edit related to script path, message, schedule, or delivery target, check `jobs.json` and confirm the expected fields were updated.
+
+Minimum verification checklist after cron changes:
+1. confirm the target job id in `openclaw cron list`;
+2. inspect `~/.openclaw/cron/jobs.json` for the updated `schedule` and `payload.message`;
+3. only then treat the edit as complete;
+4. then ask for a manual test.
 
 After setting up a scheduled notification job, explicitly guide the user to validate it.
 
