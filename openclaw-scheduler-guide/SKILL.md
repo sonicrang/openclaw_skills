@@ -1,61 +1,30 @@
 ---
 name: openclaw-scheduler-guide
-description: Explain when to use OpenClaw heartbeat, OpenClaw cron, or system cron. Use when a user asks how to schedule a task, which scheduler fits a job, how notifications reach a chat channel, or how to configure reliable scheduled notifications. Prefer this skill especially when the user wants scheduled tasks to actively notify them.
+description: Configure or explain scheduled tasks that need chat notifications in OpenClaw. Use when the user asks to create, edit, migrate, or choose a scheduler for any 定时+通知 task, reminder, periodic check, or "run and notify me" workflow. Default to OpenClaw cron with `--session isolated`; do not choose Heartbeat, OpenClaw cron main session, or system cron unless the user explicitly asks for them.
 ---
 
 # OpenClaw Scheduler Guide
 
-Use this skill to answer scheduler-choice questions with a short, stable framework.
+## Default rule
 
-## Core distinction
-
-- **Heartbeat**: periodic awareness in the **main session**.
-- **OpenClaw cron**: OpenClaw **scheduled jobs**.
-- **System cron**: OS-level **script/command scheduling**.
-
-## Default operator rule
-
-If the user asks OpenClaw to **set up, edit, migrate, or manage any scheduled task**, default to **OpenClaw cron**, not system cron.
-
-Treat this as the operational default even for simple shell-style jobs, unless the user explicitly asks for system cron or there is a hard external reason OpenClaw cron cannot be used.
-
-So requests like these should default to OpenClaw cron:
-- "每天 0 点自动 push workspace 到 GitHub"
-- "帮我配一个定时任务"
-- "改一下这个定时任务"
-- "把这个脚本改成每小时运行"
-
-Do **not** silently choose system cron just because the task is "simple" or "just a shell script". If OpenClaw is doing the scheduling work, prefer OpenClaw cron by default.
-
-## Hard rule for notification tasks
-
-If the user wants a scheduled task to **actively notify them in chat**, recommend:
+For any task that is both **scheduled** and **needs notification**, default to:
 
 - **OpenClaw cron**
 - **`--session isolated`**
-- explicit delivery settings: `--announce --channel <channel> --to <destination>`
+- **explicit delivery**: `--announce --channel <channel> --to <destination>`
 
-Do **not** default to these for notification-critical tasks unless the user explicitly asks for them and accepts the tradeoff:
+Apply this default to requests like:
+- “定时提醒我”
+- “每天跑一次并通知我”
+- “每小时检查 XXX，有结果发给我”
+- “set up a scheduled job and notify me”
 
+Do **not** default to these unless the user explicitly asks for them:
 - **Heartbeat**
 - **OpenClaw cron `main` session**
 - **System cron**
 
-Reason:
-- heartbeat may be silent by design and depends on heartbeat routing/config;
-- cron `main` depends on main-session delivery behavior instead of direct delivery;
-- system cron has no native OpenClaw chat delivery.
-
-So for requests like:
-- “定时提醒我”
-- “跑完后通知我”
-- “定时检查并发消息给我”
-- “set up a scheduled job and notify me”
-
-Default to:
-- **OpenClaw cron in `isolated` mode with explicit `--announce --channel --to`.**
-
-## Notification-safe OpenClaw cron pattern
+## Command pattern
 
 Start from this shape:
 
@@ -70,63 +39,35 @@ openclaw cron add \
   --to <destination>
 ```
 
-Key flags:
-- `--session isolated`: run outside the main session; avoid heartbeat/main-session delivery ambiguity.
-- `--announce`: enable direct outbound delivery for the cron result.
-- `--channel <channel>`: choose the destination channel explicitly.
-- `--to <destination>`: choose the exact recipient/chat/channel explicitly.
-
-Destination rule:
-- do **not** hardcode personal identifiers in the skill;
-- if the job should notify the **current chat**, auto-fill `--channel` and `--to` from the current session/chat context;
-- if the job should notify **another destination**, ask the user to confirm the target or resolve the target id first.
+Use these flags deliberately:
+- `--session isolated`: run in an isolated cron session and avoid main-session delivery ambiguity.
+- `--announce`: send the result outward instead of keeping it only in session history.
+- `--channel <channel>`: set the destination channel explicitly.
+- `--to <destination>`: set the exact chat/user/channel destination explicitly.
 
 Useful optional flags:
-- `--light-context`: reduce unnecessary context for routine scheduled jobs.
-- `--timeout-seconds <n>`: give the run enough time.
-- `--exact`: disable cron staggering when exact timing matters.
+- `--light-context`: prefer for routine jobs.
+- `--timeout-seconds <n>`: increase when the task may take longer.
+- `--exact`: use when precise timing matters.
 
-Model rule:
-- do **not** override the model by default;
-- only add `--model <model>` when the user explicitly asks for a specific model.
+Do **not** add `--model` unless the user explicitly asks for a specific model.
 
-## After configuration: verify persisted cron config, then ask for a test
+## How to get `channel` and `to`
 
-When you create, edit, migrate, or retarget an OpenClaw cron job, do **not** stop after the CLI reports success. Also verify the persisted scheduler file:
+Destination rule:
+- If the user wants the result sent to the **current chat**, fill `--channel` and `--to` from the current session/chat metadata.
+- If the user wants another destination, ask for confirmation or resolve the target first.
+- Do **not** hardcode personal identifiers into this skill.
 
-```text
-~/.openclaw/cron/jobs.json
-```
+## Testing rule
 
-Why this matters:
-- the job's actual persisted payload/path/delivery config lives in `jobs.json`;
-- when moving scripts or changing execution paths, a stale `payload.message` in `jobs.json` can leave the cron job pointing at an old path even if the user thinks the task was "updated";
-- after any cron edit related to script path, message, schedule, or delivery target, check `jobs.json` and confirm the expected fields were updated.
+For periodic scheduled jobs, require a test after setup or edit.
 
-Minimum verification checklist after cron changes:
-1. confirm the target job id in `openclaw cron list`;
-2. inspect `~/.openclaw/cron/jobs.json` for the updated `schedule` and `payload.message`;
-3. only then treat the edit as complete;
-4. then ask for a manual test.
+Minimum validation flow:
+1. confirm the job exists in `openclaw cron list`;
+2. verify the persisted config in `~/.openclaw/cron/jobs.json`, especially `schedule`, `payload.message`, and delivery fields;
+3. run `openclaw cron run <job-id>` once;
+4. confirm the notification actually arrived in the intended chat.
 
-After setting up a scheduled notification job, explicitly guide the user to validate it.
-
-Preferred follow-up:
-1. run the job once manually with `openclaw cron run <job-id>`;
-2. verify that the notification reached the intended chat;
-3. verify that the content format matches expectation;
-4. only then treat the setup as complete.
-
-Use wording like:
-- “Let’s test it once now.”
-- “Run `openclaw cron run <job-id>` and confirm you received the message.”
-- “If nothing arrives, check delivery settings before relying on the schedule.”
-
-## Default answer pattern
-
-Answer in this order:
-1. give the recommendation first: for scheduled notifications, use **OpenClaw cron isolated**;
-2. if needed, briefly explain why heartbeat / cron main / system cron are not the default for this case;
-3. show the concrete command pattern with `--session isolated --announce --channel --to`;
-4. do not add `--model` unless the user explicitly requested it;
-5. end by asking the user to run a manual test and confirm delivery.
+Default closing move:
+- ask the user to test once now before relying on the schedule.
