@@ -1,6 +1,6 @@
 ---
 name: openclaw-scheduler-guide
-description: Explain when to use OpenClaw heartbeat, OpenClaw cron, or system cron. Use when a user asks how to schedule a task, which scheduler fits a job, or how notifications reach a chat channel.
+description: Explain when to use OpenClaw heartbeat, OpenClaw cron, or system cron. Use when a user asks how to schedule a task, which scheduler fits a job, how notifications reach a chat channel, or how to configure reliable scheduled notifications. Prefer this skill especially when the user wants scheduled tasks to actively notify them.
 ---
 
 # OpenClaw Scheduler Guide
@@ -13,68 +13,89 @@ Use this skill to answer scheduler-choice questions with a short, stable framewo
 - **OpenClaw cron**: OpenClaw **scheduled jobs**.
 - **System cron**: OS-level **script/command scheduling**.
 
-## When to use
+## Hard rule for notification tasks
 
-### Heartbeat
+If the user wants a scheduled task to **actively notify them in chat**, recommend:
 
-Use when:
-- multiple lightweight checks can be batched;
-- main-session context matters;
-- exact timing does not matter.
+- **OpenClaw cron**
+- **`--session isolated`**
+- explicit delivery settings: `--announce --channel <channel> --to <destination>`
 
-Notes:
-- runs in the **main session**;
-- default delivery is effectively silent unless configured; use heartbeat `target` such as `last` when you want channel delivery;
-- if nothing needs attention, `HEARTBEAT_OK` is suppressed.
+Do **not** default to these for notification-critical tasks unless the user explicitly asks for them and accepts the tradeoff:
 
-Example:
-- “Every 30 minutes, check inbox + calendar and tell me only if something matters.”
+- **Heartbeat**
+- **OpenClaw cron `main` session**
+- **System cron**
 
-### OpenClaw cron
+Reason:
+- heartbeat may be silent by design and depends on heartbeat routing/config;
+- cron `main` depends on main-session delivery behavior instead of direct delivery;
+- system cron has no native OpenClaw chat delivery.
 
-Use when:
-- timing matters;
-- the task is an **agent task** with prompt/tool/model behavior;
-- the task should run in isolation or deliver directly to a channel.
+So for requests like:
+- “定时提醒我”
+- “跑完后通知我”
+- “定时检查并发消息给我”
+- “set up a scheduled job and notify me”
 
-Notes:
-- runs inside the **Gateway** and persists jobs under OpenClaw state;
-- supports `main` session jobs and `isolated` jobs;
-- isolated jobs default to `announce` delivery if `delivery` is omitted;
-- recurring top-of-hour schedules may be staggered by a small deterministic offset unless forced exact.
+Default to:
+- **OpenClaw cron in `isolated` mode with explicit `--announce --channel --to`.**
 
-Example:
-- “Every hour, check GitHub issues and notify me if there is something new.”
-- “Remind me in 20 minutes.”
+## Notification-safe OpenClaw cron pattern
 
-Common commands:
-- `openclaw cron add ...`
-- `openclaw cron list`
-- `openclaw cron run <job-id>`
-- `openclaw cron remove <job-id>`
+Start from this shape:
 
-### System cron
+```bash
+openclaw cron add \
+  --name "Job name" \
+  --cron "0 * * * *" \
+  --session isolated \
+  --message "Do the task. If there is nothing worth reporting, stay silent." \
+  --announce \
+  --channel <channel> \
+  --to <destination>
+```
 
-Use when:
-- the task is just “run this script/command on a schedule”; 
-- no OpenClaw prompt, session, or tool semantics are needed.
+Key flags:
+- `--session isolated`: run outside the main session; avoid heartbeat/main-session delivery ambiguity.
+- `--announce`: enable direct outbound delivery for the cron result.
+- `--channel <channel>`: choose the destination channel explicitly.
+- `--to <destination>`: choose the exact recipient/chat/channel explicitly.
 
-Example:
-- “Every hour, run `python monitor.py`.”
-- “Every night, back up a directory.”
+Destination rule:
+- do **not** hardcode personal identifiers in the skill;
+- if the job should notify the **current chat**, auto-fill `--channel` and `--to` from the current session/chat context;
+- if the job should notify **another destination**, ask the user to confirm the target or resolve the target id first.
 
-## Channel delivery
+Useful optional flags:
+- `--light-context`: reduce unnecessary context for routine scheduled jobs.
+- `--timeout-seconds <n>`: give the run enough time.
+- `--exact`: disable cron staggering when exact timing matters.
 
-- **Heartbeat**: reply is routed by heartbeat `target` / `to`; `target: "last"` sends to the last contact.
-- **OpenClaw cron (main)**: cron enqueues a system event, then main session / heartbeat reply is routed.
-- **OpenClaw cron (isolated)**: `delivery.mode = "announce"` sends directly through OpenClaw outbound channel adapters; `channel` and `to` choose the destination.
-- **OpenClaw cron (webhook)**: `delivery.mode = "webhook"` posts to a URL, not to a chat channel.
-- **System cron**: no native OpenClaw delivery; the script must call an API or invoke OpenClaw.
+Model rule:
+- do **not** override the model by default;
+- only add `--model <model>` when the user explicitly asks for a specific model.
+
+## After configuration: always ask for a test
+
+After setting up a scheduled notification job, explicitly guide the user to validate it.
+
+Preferred follow-up:
+1. run the job once manually with `openclaw cron run <job-id>`;
+2. verify that the notification reached the intended chat;
+3. verify that the content format matches expectation;
+4. only then treat the setup as complete.
+
+Use wording like:
+- “Let’s test it once now.”
+- “Run `openclaw cron run <job-id>` and confirm you received the message.”
+- “If nothing arrives, check delivery settings before relying on the schedule.”
 
 ## Default answer pattern
 
 Answer in this order:
-1. one-line distinction;
-2. which one fits this task;
-3. one short reason;
-4. one short example.
+1. give the recommendation first: for scheduled notifications, use **OpenClaw cron isolated**;
+2. if needed, briefly explain why heartbeat / cron main / system cron are not the default for this case;
+3. show the concrete command pattern with `--session isolated --announce --channel --to`;
+4. do not add `--model` unless the user explicitly requested it;
+5. end by asking the user to run a manual test and confirm delivery.
