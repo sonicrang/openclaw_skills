@@ -13,6 +13,20 @@ Use this skill to answer scheduler-choice questions with a short, stable framewo
 - **OpenClaw cron**: OpenClaw **scheduled jobs**.
 - **System cron**: OS-level **script/command scheduling**.
 
+## Default operator rule
+
+If the user asks OpenClaw to **set up, edit, migrate, or manage any scheduled task**, default to **OpenClaw cron**, not system cron.
+
+Treat this as the operational default even for simple shell-style jobs, unless the user explicitly asks for system cron or there is a hard external reason OpenClaw cron cannot be used.
+
+So requests like these should default to OpenClaw cron:
+- "每天 0 点自动 push workspace 到 GitHub"
+- "帮我配一个定时任务"
+- "改一下这个定时任务"
+- "把这个脚本改成每小时运行"
+
+Do **not** silently choose system cron just because the task is "simple" or "just a shell script". If OpenClaw is doing the scheduling work, prefer OpenClaw cron by default.
+
 ## Hard rule for notification tasks
 
 If the user wants a scheduled task to **actively notify them in chat**, recommend:
