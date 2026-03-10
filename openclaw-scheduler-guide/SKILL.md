@@ -5,37 +5,39 @@ description: Configure or explain scheduled tasks and reliable notification deli
 
 # OpenClaw Scheduler Guide
 
-## Default rule
+## Core rule
 
-If you promise a future user-visible update — for example, “稍后发你”, “完成后通知你”, “我发给你”, “跑完再告诉你” — you must also define the actual delivery path.
+If you say “完成后发你”, you must be able to answer these 3 questions clearly:
 
-That means you need to know:
-1. what event counts as completion;
-2. who sends the later message;
-3. which OpenClaw path/tool delivers it.
+1. What event counts as completion?
+2. Who sends the later message?
+3. Which delivery path sends it to the user?
 
-Do not rely on vague intent or assume a background task will somehow create a later visible message automatically.
+If you cannot answer all 3, the follow-up is not really bound yet.
 
-For any task that is both **scheduled** and **needs notification**, default to:
+Do not rely on vague intent like “I’ll send it later”.
+Do not assume background work will automatically create a user-visible message.
+
+## Default choice
+
+For anything that is both **scheduled** and **needs notification**, default to:
 
 - **OpenClaw cron**
 - **`--session isolated`**
 - **explicit delivery**: `--announce --channel <channel> --to <destination>`
 
-Apply this default to requests like:
+Use this default for requests like:
 - “定时提醒我”
 - “每天跑一次并通知我”
 - “每小时检查 XXX，有结果发给我”
-- “set up a scheduled job and notify me”
+- “run this later and notify me”
 
-Do **not** default to these unless the user explicitly asks for them:
+Do **not** default to these unless the user explicitly asks:
 - **Heartbeat**
 - **OpenClaw cron `main` session**
 - **System cron**
 
-## Command pattern
-
-Start from this shape:
+## Minimal cron template
 
 ```bash
 openclaw cron add \
@@ -48,102 +50,101 @@ openclaw cron add \
   --to <destination>
 ```
 
-Use these flags deliberately:
-- `--session isolated`: run in an isolated cron session and avoid main-session delivery ambiguity.
-- `--announce`: send the result outward instead of keeping it only in session history.
-- `--channel <channel>`: set the destination channel explicitly.
-- `--to <destination>`: set the exact chat/user/channel destination explicitly.
+Use the flags on purpose:
+- `--session isolated`: avoid main-session delivery ambiguity
+- `--announce`: send outward, not just into cron history
+- `--channel <channel>`: set the channel explicitly
+- `--to <destination>`: set the exact destination explicitly
 
-Useful optional flags:
-- `--light-context`: prefer for routine jobs.
-- `--timeout-seconds <n>`: increase when the task may take longer.
-- `--exact`: use when precise timing matters.
+Useful options:
+- `--light-context`: prefer for routine jobs
+- `--timeout-seconds <n>`: increase for longer tasks
+- `--exact`: use when exact timing matters
 
-Do **not** add `--model` unless the user explicitly asks for a specific model.
+Do **not** add `--model` unless the user explicitly asks.
 
-## Async delivery rules
+## Binding templates
 
-### 1. Short task: reply when finished
+### 1. Subagent completion
 
-If the task is likely to finish in the current turn, do not say “I’ll send it later”.
-Just finish the work and reply once with the result.
+Use when a subagent does the work and the user expects the final result in chat.
 
-### 2. Scheduled or periodic task: use cron with explicit delivery
+Answer the 3 questions like this:
+1. **Completion event**: the subagent completion event arrives
+2. **Who sends**: the current assistant session
+3. **Delivery path**: normal assistant reply in the current chat, or `message(action=send)` if doing a proactive send
 
-For anything like “every 10 minutes tell me status”, “run later and notify me”, or recurring checks, use OpenClaw cron with explicit delivery:
+Rules:
+- `sessions_spawn` only starts the work; it does **not** mean the result has already been sent
+- Do not say “完成后发你” unless you will actually send the completion update when that event arrives
+- If a runtime completion event asks for user delivery, rewrite it in your own voice and send it immediately
 
-- `--announce`
-- `--channel <channel>`
-- `--to <destination>`
+### 2. Cron notification
 
-Starting a cron job without delivery fields is not enough if the user expects a visible notification.
+Use when the task should run later or repeatedly and notify the user.
 
-### 3. Background exec/process: process start is not delivery
+Answer the 3 questions like this:
+1. **Completion event**: each cron run finishes and produces a reportable result
+2. **Who sends**: OpenClaw cron delivery
+3. **Delivery path**: `--announce --channel <channel> --to <destination>`
 
-Starting a background `exec` or managing a `process` only means the work is running.
-It does **not** mean completion will be announced.
-If the user expects a later message, add a concrete follow-up path:
-- cron watcher with delivery, or
-- stay with the task and send the completion update yourself later.
+Rules:
+- A cron job without delivery fields is not enough if the user expects a visible notification
+- If “nothing new” should be silent, say so directly in `--message`
+- Prefer `isolated` session unless the user explicitly wants another mode
 
-### 4. Subagent completion: spawn is not final delivery
+### 3. `message` + `NO_REPLY`
 
-`sessions_spawn` is non-blocking. Spawning a subagent does not mean the final result has already been sent.
+Use when the visible reply has already been sent through the `message` tool.
 
-For subagent work:
-- If you need the final result in chat, either wait for the completion event and send the update yourself, or explicitly use a separate proactive send path.
-- Do not say “I’ll send you the result later” unless you actually control that later send.
-- If a completion event arrives and asks for user delivery, rewrite it in your own voice and send it immediately.
+Answer the 3 questions like this:
+1. **Completion event**: `message(action=send)` succeeds
+2. **Who sends**: the `message` tool / channel integration
+3. **Delivery path**: the `message` send itself
 
-### 5. `message` + `NO_REPLY`: when to use it
-
-Use `message(action=send)` when you want to proactively deliver the user-visible message through the messaging tool.
-
-After a successful `message(action=send)` that serves as the visible reply, return only:
-
-`NO_REPLY`
-
-Why:
-- it prevents duplicate delivery;
-- the user-visible content has already been sent by the tool.
-
-Do **not** use a normal assistant reply after a successful proactive `message(action=send)` for the same content.
+Rule:
+- After a successful `message(action=send)` that already delivered the user-visible content, return only `NO_REPLY`
 
 Do **not** confuse this with future follow-up delivery:
-- `NO_REPLY` only suppresses the current turn’s extra reply;
-- it does not create a later completion message by itself.
+- `NO_REPLY` suppresses duplicate output in the current turn
+- it does **not** create a later notification by itself
 
-## How to get `channel` and `to`
+## Common mistakes
 
-Destination rule:
-- If the user wants the result sent to the **current chat**, fill `--channel` and `--to` from the current session/chat metadata.
-- If the user wants another destination, ask for confirmation or resolve the target first.
-- Do **not** hardcode personal identifiers into this skill.
+### Background exec/process
 
-## Common safe phrasing
+Starting a background `exec` or `process` only means the work is running.
+It does **not** mean completion will be announced.
 
-Prefer exact status language.
+If the user expects a later message, add a real follow-up path.
 
-Good:
-- “我先在后台运行；现在还没最终结果。”
-- “我已经设置好每 10 分钟一次通知。”
-- “这条是开始确认，完成结果我会另外发一条。”
-- “我先把已完成的这一份发你，剩下的还没发。”
+### Vague status promises
 
 Avoid:
 - “我稍后发你” with no delivery path
-- “完成后通知你” when you have not set up who/how sends it
+- “完成后通知你” when you cannot say who sends it and how
 - “已经在跟进了” when nothing user-visible will arrive
 
-## Testing rule
+Prefer:
+- “我先在后台运行；现在还没最终结果。”
+- “我已经设置好每 10 分钟一次通知。”
+- “这条是开始确认，完成结果我会另外发一条。”
 
-For periodic scheduled jobs, require a test after setup or edit.
+## How to fill `channel` and `to`
 
-Minimum validation flow:
-1. confirm the job exists in `openclaw cron list`;
-2. verify the persisted config in `~/.openclaw/cron/jobs.json`, especially `schedule`, `payload.message`, and delivery fields;
-3. run `openclaw cron run <job-id>` once;
-4. confirm the notification actually arrived in the intended chat.
+- If the result should go to the **current chat**, fill `--channel` and `--to` from current session metadata
+- If the result should go somewhere else, confirm the destination first
+- Do **not** hardcode personal identifiers into this skill
+
+## Test after setup or edit
+
+For periodic jobs, test before relying on the schedule.
+
+Minimum check:
+1. confirm the job exists in `openclaw cron list`
+2. verify `~/.openclaw/cron/jobs.json`, especially `schedule`, `payload.message`, and delivery fields
+3. run `openclaw cron run <job-id>` once
+4. confirm the notification actually reached the intended chat
 
 Default closing move:
-- ask the user to test once now before relying on the schedule.
+- ask the user to test once now
