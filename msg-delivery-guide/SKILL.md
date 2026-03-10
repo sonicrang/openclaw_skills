@@ -1,6 +1,6 @@
 ---
-name: openclaw-scheduler-guide
-description: Configure or explain scheduled tasks and reliable notification delivery in OpenClaw. Use when the user asks to create, edit, migrate, or choose a scheduler for any 定时+通知 task, reminder, periodic check, or "run and notify me" workflow, or when you need to ensure a background task, subagent completion, cron run, or proactive send actually reaches the user. Default to OpenClaw cron with `--session isolated`; do not choose Heartbeat, OpenClaw cron main session, or system cron unless the user explicitly asks for them.
+name: msg-delivery-guide
+description: Explain or configure reliable user-visible message delivery in OpenClaw. Use when the user asks how later results will be sent, how to bind completion to notification, how to set up 定时+通知 workflows, or when you need to choose between cron, subagent completion delivery, background task follow-up, or `message` + `NO_REPLY`. Default scheduled notification workflows to OpenClaw cron with `--session isolated` and explicit delivery fields.
 ---
 
 # OpenClaw Scheduler Guide
