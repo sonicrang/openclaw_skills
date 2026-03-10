@@ -1,6 +1,6 @@
 ---
 name: openclaw-msg-delivery-guide
-description: Explain or configure reliable message delivery in OpenClaw. Use when the user asks how a later result will reach them, how to bind completion to notification, or how to set up 定时+通知 workflows. Choose among cron delivery, subagent completion delivery, background-task follow-up, and `message` + `NO_REPLY`. Default scheduled notifications to OpenClaw cron with `--session isolated` and explicit delivery fields.
+description: Prevent vague follow-up promises in OpenClaw by making message delivery explicit. Use when the user asks how a later result will reach them, how to bind completion to notification, or how to set up scheduled tasks that must notify the user. Choose among cron delivery, subagent completion delivery, background-task follow-up, and `message` + `NO_REPLY`. Default scheduled notifications to OpenClaw cron with `--session isolated` and explicit delivery fields.
 metadata:
   openclaw:
     requires:
@@ -10,6 +10,17 @@ metadata:
 ---
 
 # OpenClaw Message Delivery Guide
+
+## Problem this skill solves
+
+This skill prevents a common failure mode:
+
+- the agent says "I will send it later"
+- background work starts
+- no real delivery path is bound
+- the user never receives the promised follow-up
+
+Use this skill to make message delivery explicit before promising a later update.
 
 ## Local scope disclosure
 
@@ -22,7 +33,7 @@ Use it when the user wants scheduler or delivery setup, editing, migration, veri
 
 ## Core rule
 
-If you say “完成后发你”, you must be able to answer these 3 questions clearly:
+If you say "I will send it when it is done", you must be able to answer these 3 questions clearly:
 
 1. What event counts as completion?
 2. Who sends the later message?
@@ -30,7 +41,7 @@ If you say “完成后发你”, you must be able to answer these 3 questions c
 
 If you cannot answer all 3, the follow-up is not really bound yet.
 
-Do not rely on vague intent like “I’ll send it later”.
+Do not rely on vague intent like "I will send it later".
 Do not assume background work will automatically create a user-visible message.
 
 ## Default choice
@@ -42,10 +53,10 @@ For anything that is both **scheduled** and **needs notification**, default to:
 - **explicit delivery**: `--announce --channel <channel> --to <destination>`
 
 Use this default for requests like:
-- “定时提醒我”
-- “每天跑一次并通知我”
-- “每小时检查 XXX，有结果发给我”
-- “run this later and notify me”
+- "Remind me later"
+- "Run this every day and notify me"
+- "Check this every hour and send me the result"
+- "Run this later and notify me"
 
 Do **not** default to these unless the user explicitly asks:
 - **Heartbeat**
@@ -91,7 +102,7 @@ Answer the 3 questions like this:
 
 Rules:
 - `sessions_spawn` only starts the work; it does **not** mean the result has already been sent
-- Do not say “完成后发你” unless you will actually send the completion update when that event arrives
+- Do not say "I will send it when done" unless you will actually send the completion update when that event arrives
 - If a runtime completion event asks for user delivery, rewrite it in your own voice and send it immediately
 
 ### 2. Cron notification
@@ -105,7 +116,7 @@ Answer the 3 questions like this:
 
 Rules:
 - A cron job without delivery fields is not enough if the user expects a visible notification
-- If “nothing new” should be silent, say so directly in `--message`
+- If "nothing new" should be silent, say so directly in `--message`
 - Prefer `isolated` session unless the user explicitly wants another mode
 
 ### 3. `message` + `NO_REPLY`
@@ -136,14 +147,14 @@ If the user expects a later message, add a real follow-up path.
 ### Vague status promises
 
 Avoid:
-- “我稍后发你” with no delivery path
-- “完成后通知你” when you cannot say who sends it and how
-- “已经在跟进了” when nothing user-visible will arrive
+- "I will send it later" with no delivery path
+- "I will notify you when it is done" when you cannot say who sends it and how
+- "I am following up" when nothing user-visible will arrive
 
 Prefer:
-- “我先在后台运行；现在还没最终结果。”
-- “我已经设置好每 10 分钟一次通知。”
-- “这条是开始确认，完成结果我会另外发一条。”
+- "I have started the background task; there is no final result yet."
+- "I have set up a notification every 10 minutes."
+- "This message confirms the start; I will send the completion result separately."
 
 ## How to fill `channel` and `to`
 
