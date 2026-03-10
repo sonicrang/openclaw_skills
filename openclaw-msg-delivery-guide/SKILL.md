@@ -1,6 +1,6 @@
 ---
 name: openclaw-msg-delivery-guide
-description: Explain or configure reliable user-visible message delivery in OpenClaw. Use when the user asks how later results will be sent, how to bind completion to notification, how to set up 定时+通知 workflows, or when you need to choose between cron, subagent completion delivery, background task follow-up, or `message` + `NO_REPLY`. Default scheduled notification workflows to OpenClaw cron with `--session isolated` and explicit delivery fields.
+description: Explain or configure reliable message delivery in OpenClaw. Use when the user asks how a later result will reach them, how to bind completion to notification, or how to set up 定时+通知 workflows. Choose among cron delivery, subagent completion delivery, background-task follow-up, and `message` + `NO_REPLY`. Default scheduled notifications to OpenClaw cron with `--session isolated` and explicit delivery fields.
 ---
 
 # OpenClaw Scheduler Guide
