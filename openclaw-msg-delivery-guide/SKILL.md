@@ -1,9 +1,24 @@
 ---
 name: openclaw-msg-delivery-guide
 description: Explain or configure reliable message delivery in OpenClaw. Use when the user asks how a later result will reach them, how to bind completion to notification, or how to set up 定时+通知 workflows. Choose among cron delivery, subagent completion delivery, background-task follow-up, and `message` + `NO_REPLY`. Default scheduled notifications to OpenClaw cron with `--session isolated` and explicit delivery fields.
+metadata:
+  openclaw:
+    requires:
+      bins: ["openclaw"]
+      files: ["~/.openclaw/cron/jobs.json"]
+      note: "This skill inspects local OpenClaw cron state and may run `openclaw cron` commands or read the persisted cron job file for verification."
 ---
 
-# OpenClaw Scheduler Guide
+# OpenClaw Message Delivery Guide
+
+## Local scope disclosure
+
+This skill inspects local OpenClaw scheduler state.
+It may:
+- run `openclaw cron list`, `openclaw cron run`, `openclaw cron edit`, `openclaw cron enable`, or `openclaw cron disable`
+- read `~/.openclaw/cron/jobs.json` to verify persisted cron configuration
+
+Use it when the user wants scheduler or delivery setup, editing, migration, verification, or debugging.
 
 ## Core rule
 
